@@ -39,6 +39,16 @@ curl -fsSL https://raw.githubusercontent.com/rizbud/meta-ads-cli/main/install.sh
 meta-ads --version   # now a global command
 ```
 
+Pass `--skill` to also install the usage skill for AI agents:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rizbud/meta-ads-cli/main/install.sh | bash -s -- --skill
+# or, from a checkout:
+./install.sh --skill
+```
+
+This copies the meta-ads-cli usage docs to `~/.agents/skills/meta-ads-cli/SKILL.md` so agents can look up commands, config schema, and safety rails on demand.
+
 The script picks the binary matching your OS and architecture (e.g. `meta-ads-linux-amd64`, `meta-ads-darwin-arm64`) from the latest release. If no matching release asset exists yet, it falls back to building from source — which needs Go 1.23+ on your path.
 
 From a checkout of the repo, `install.sh` instead reuses the prebuilt `./meta-ads` so no Go is needed:
@@ -345,4 +355,5 @@ go test ./...
 - `api/` — Meta Graph API client with dry-run support
 - `campaign/` — full campaign orchestration and status printing
 - `audit/` — JSONL audit events
+- `.agents/skills/meta-ads-cli/` — agent skill (usage docs; install with `install.sh --skill`)
 

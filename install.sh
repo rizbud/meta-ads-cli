@@ -6,13 +6,17 @@
 #
 #   1. From a checkout of the repo (reuses the prebuilt ./meta-ads if present,
 #      otherwise builds it — requires a Go toolchain):
-#        ./install.sh [DEST_DIR]
+#        ./install.sh [DEST_DIR] [--skill]
 #
 #   2. Piped from GitHub with a prebuilt release binary available (no Go needed):
 #        curl -fsSL https://raw.githubusercontent.com/rizbud/meta-ads-cli/main/install.sh | bash
 #
 #   3. Piped from GitHub with no matching release binary for this OS/arch yet
 #      (downloads the source tarball and builds it — requires a Go toolchain).
+#
+# Options:
+#   --skill                 also install the agent skill to ~/.agents/skills/meta-ads-cli/
+#   --help                  show usage
 #
 # Install directory selection (argument wins over INSTALL_DIR):
 #   1. First positional argument:     ./install.sh /custom/bin
@@ -29,9 +33,12 @@ set -euo pipefail
 OWNER="rizbud"
 REPO="meta-ads-cli"
 BRANCH="main"
+SKILL_REL=".agents/skills/meta-ads-cli/SKILL.md"
 
 # Path of the binary to install; set by resolve_binary().
 binary=""
+# Directory holding the repo files, if one was resolved locally.
+source_dir=""
 
 # Returns 0 if directory $1 is already on PATH.
 on_path() {
@@ -93,7 +100,7 @@ pick_dir() {
   echo "$HOME/.local/bin"
 }
 
-# Resolve and prepare the binary to install. Sets the global $binary.
+# Resolve and prepare the binary to install. Sets $binary and $source_dir.
 resolve_binary() {
   local script repo
   script="${BASH_SOURCE[0]:-}"
@@ -102,6 +109,7 @@ resolve_binary() {
   if [[ -n "$script" ]]; then
     repo="$(cd "$(dirname "$script")" 2>/dev/null && pwd || true)"
     if [[ -n "$repo" && -f "$repo/go.mod" ]]; then
+      source_dir="$repo"
       binary="$repo/meta-ads"
       if [[ ! -x "$binary" ]]; then
         require_go
@@ -135,8 +143,9 @@ resolve_binary() {
     exit 1
   }
   tar -xzf "$BUILD_DIR/src.tar.gz" -C "$BUILD_DIR"
-  binary="$BUILD_DIR/$REPO-$BRANCH/meta-ads"
-  (cd "$BUILD_DIR/$REPO-$BRANCH" && go build -o meta-ads .)
+  source_dir="$BUILD_DIR/$REPO-$BRANCH"
+  binary="$source_dir/meta-ads"
+  (cd "$source_dir" && go build -o meta-ads .)
 }
 
 # Install $binary into $1 (creating it if needed, honoring read-only dirs).
@@ -156,6 +165,27 @@ install_binary() {
   fi
 }
 
+# Install the agent skill to ~/.agents/skills/meta-ads-cli/ (from the local
+# source when available, otherwise fetched from GitHub).
+install_skill() {
+  local dest="$HOME/.agents/skills/meta-ads-cli"
+  local src=""
+  if [[ -n "$source_dir" && -f "$source_dir/$SKILL_REL" ]]; then
+    src="$source_dir/$SKILL_REL"
+  fi
+  mkdir -p "$dest"
+  if [[ -n "$src" ]]; then
+    install -m 0644 "$src" "$dest/SKILL.md"
+  else
+    curl -fsSL "https://raw.githubusercontent.com/$OWNER/$REPO/$BRANCH/$SKILL_REL" \
+      -o "$dest/SKILL.md" || {
+      echo "error: could not download the SKILL file." >&2
+      exit 1
+    }
+  fi
+  echo ">> Installed skill to $dest/SKILL.md"
+}
+
 # Confirm the install and help the user run the command.
 verify() {
   local dest="$1"
@@ -169,21 +199,45 @@ verify() {
   fi
 }
 
+usage() {
+  echo "usage: ${BASH_SOURCE[0]:-install.sh} [DEST_DIR] [--skill] [--help]" >&2
+  echo "  DEST_DIR  install directory (default: auto-detected)" >&2
+  echo "  --skill   also install the agent skill to ~/.agents/skills/meta-ads-cli/" >&2
+}
+
 main() {
-  local install_dir
+  local install_dir=""
+  local install_skill=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --skill) install_skill=1; shift ;;
+      -h | --help) usage; exit 0 ;;
+      -*) echo "unknown option: $1" >&2; usage; exit 1 ;;
+      *)
+        if [[ -n "$install_dir" ]]; then
+          echo "error: too many arguments: $1" >&2
+          exit 1
+        fi
+        install_dir="$1"
+        shift
+        ;;
+    esac
+  done
 
   resolve_binary
 
-  install_dir=""
-  if [[ $# -ge 1 ]]; then
-    install_dir="$1"
-  elif [[ -n "${INSTALL_DIR:-}" ]]; then
-    install_dir="$INSTALL_DIR"
-  else
+  if [[ -z "$install_dir" ]]; then
+    install_dir="${INSTALL_DIR:-}"
+  fi
+  if [[ -z "$install_dir" ]]; then
     install_dir="$(pick_dir)"
   fi
 
   install_binary "$install_dir"
+  if [[ "$install_skill" -eq 1 ]]; then
+    install_skill
+  fi
   verify "$install_dir"
 }
 
