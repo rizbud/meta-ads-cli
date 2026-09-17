@@ -16,16 +16,34 @@ const defaultAPIVersion = "v21.0"
 
 // APIError is returned when the Meta Graph API responds with an error.
 type APIError struct {
-	StatusCode int
-	MetaCode   int
-	Message    string
+	StatusCode  int
+	MetaCode    int
+	Subcode     int
+	Message     string
+	UserMessage string
+	UserTitle   string
+	ErrorData   string
 }
 
 func (e *APIError) Error() string {
-	if e.MetaCode != 0 {
-		return fmt.Sprintf("%s (HTTP %d, error %d)", e.Message, e.StatusCode, e.MetaCode)
+	parts := []string{e.Message}
+	if e.UserTitle != "" {
+		parts = append(parts, e.UserTitle)
 	}
-	return fmt.Sprintf("%s (HTTP %d)", e.Message, e.StatusCode)
+	if e.UserMessage != "" && e.UserMessage != e.Message {
+		parts = append(parts, e.UserMessage)
+	}
+	detail := strings.Join(parts, ": ")
+	if e.ErrorData != "" && e.ErrorData != "{}" {
+		detail = fmt.Sprintf("%s %s", detail, e.ErrorData)
+	}
+	if e.Subcode != 0 {
+		return fmt.Sprintf("%s (HTTP %d, error %d, subcode %d)", detail, e.StatusCode, e.MetaCode, e.Subcode)
+	}
+	if e.MetaCode != 0 {
+		return fmt.Sprintf("%s (HTTP %d, error %d)", detail, e.StatusCode, e.MetaCode)
+	}
+	return fmt.Sprintf("%s (HTTP %d)", detail, e.StatusCode)
 }
 
 // Config holds client settings.
@@ -162,17 +180,27 @@ func vJoin(vs []string) string {
 func parseAPIError(statusCode int, body []byte) error {
 	var payload struct {
 		Error struct {
-			Message string `json:"message"`
-			Code    int    `json:"code"`
+			Message        string          `json:"message"`
+			Code           int             `json:"code"`
+			ErrorSubcode   int             `json:"error_subcode"`
+			ErrorUserMsg   string          `json:"error_user_msg"`
+			ErrorUserTitle string          `json:"error_user_title"`
+			ErrorData      json.RawMessage `json:"error_data"`
 		} `json:"error"`
 	}
 	message := string(body)
-	metaCode := 0
+	apiErr := &APIError{StatusCode: statusCode, Message: message}
 	if err := json.Unmarshal(body, &payload); err == nil && payload.Error.Message != "" {
-		message = payload.Error.Message
-		metaCode = payload.Error.Code
+		apiErr.Message = payload.Error.Message
+		apiErr.MetaCode = payload.Error.Code
+		apiErr.Subcode = payload.Error.ErrorSubcode
+		apiErr.UserMessage = payload.Error.ErrorUserMsg
+		apiErr.UserTitle = payload.Error.ErrorUserTitle
+		if len(payload.Error.ErrorData) > 0 {
+			apiErr.ErrorData = string(payload.Error.ErrorData)
+		}
 	}
-	return &APIError{StatusCode: statusCode, MetaCode: metaCode, Message: message}
+	return apiErr
 }
 
 func extractID(body []byte) (string, error) {
@@ -304,6 +332,7 @@ type CreateAdSetParams struct {
 func (c *Client) CreateAdSet(p CreateAdSetParams) (string, error) {
 	t := p.Targeting
 	spec := map[string]any{}
+	spec["targeting_automation"] = map[string]any{"advantage_audience": 0}
 	spec["age_min"] = t.AgeMin
 	if spec["age_min"] == 0 {
 		spec["age_min"] = 18

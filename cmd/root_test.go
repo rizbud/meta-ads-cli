@@ -672,6 +672,40 @@ func TestRandomAuditWarningOnFailure(t *testing.T) {
 	}
 }
 
+func TestCreatePartialResultReported(t *testing.T) {
+	auditDir(t)
+	srv, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/act_123456/adimages":
+			jsonResp(w, 200, map[string]any{"images": map[string]any{"ad.png": map[string]string{"hash": "h1"}}})
+		case "/act_123456/campaigns":
+			jsonResp(w, 200, map[string]string{"id": "camp_partial"})
+		case "/act_123456/adsets":
+			jsonResp(w, 200, map[string]string{"id": "adset_partial"})
+		case "/act_123456/adcreatives":
+			jsonResp(w, 400, map[string]any{"error": map[string]any{"message": "App is in development mode", "code": 100}})
+		default:
+			jsonResp(w, 200, map[string]string{"id": "other"})
+		}
+	})
+	path := writeConfigFile(t, sampleYAML)
+	out, err := runCmd(t, testRunner(t, srv), "create", "--config", path, "--yes")
+	if err == nil {
+		t.Fatal("expected error for creative failure")
+	}
+	for _, want := range []string{
+		"Partial resources were created",
+		"camp_partial",
+		"adset_partial",
+		"meta-ads delete adset_partial --yes",
+		"meta-ads delete camp_partial --yes",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestInsightsDefaultObjectID(t *testing.T) {
 	srv, reqs := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, 200, map[string]any{"data": []map[string]any{}})

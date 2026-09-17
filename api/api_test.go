@@ -178,6 +178,10 @@ func TestCreateAdSet(t *testing.T) {
 	if spec["publisher_platforms"] == nil {
 		t.Errorf("publisher_platforms missing")
 	}
+	auto, ok := spec["targeting_automation"].(map[string]any)
+	if !ok || auto["advantage_audience"] != float64(0) {
+		t.Errorf("targeting_automation = %v, want advantage_audience 0", spec["targeting_automation"])
+	}
 	fspec := spec["flexible_spec"].([]any)
 	interests := fspec[0].(map[string]any)["interests"].([]any)
 	if interests[0].(map[string]any)["id"] != "6003139266461" {
@@ -210,6 +214,10 @@ func TestCreateAdSetDefaultsTargeting(t *testing.T) {
 	}
 	if spec["instagram_positions"] == nil {
 		t.Errorf("default instagram_positions missing")
+	}
+	auto, ok := spec["targeting_automation"].(map[string]any)
+	if !ok || auto["advantage_audience"] != float64(0) {
+		t.Errorf("targeting_automation = %v, want advantage_audience 0", spec["targeting_automation"])
 	}
 }
 

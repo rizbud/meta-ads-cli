@@ -114,6 +114,20 @@ func newCreateCommand(r *Runner) *cobra.Command {
 				if metaCode != 0 {
 					fmt.Fprintf(out, "Error code: %d\n", metaCode)
 				}
+				if res.CampaignID != "" || res.AdSetID != "" {
+					fmt.Fprintln(out, "\nPartial resources were created and left in place:")
+					if res.CampaignID != "" {
+						fmt.Fprintf(out, "  Campaign: %s\n", res.CampaignID)
+					}
+					if res.AdSetID != "" {
+						fmt.Fprintf(out, "  Ad Set:   %s\n", res.AdSetID)
+					}
+					fmt.Fprintln(out, "\nClean up with:")
+					if res.AdSetID != "" {
+						fmt.Fprintf(out, "  meta-ads delete %s --yes\n", res.AdSetID)
+					}
+					fmt.Fprintf(out, "  meta-ads delete %s --yes\n", res.CampaignID)
+				}
 				return errNonZero
 			}
 
