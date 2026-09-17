@@ -1,0 +1,9 @@
+# Binaries / build output
+meta-ads
+dist/
+
+# Environment and secrets
+.env
+
+# Test artifacts
+*.test

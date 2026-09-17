@@ -1,0 +1,50 @@
+# meta-ads-cli campaign config
+# Copy this file and customize for your campaign:
+#   cp campaign.example.yaml campaign.yaml
+
+campaign:
+  name: "Spring Sale - March 2026"
+  objective: OUTCOME_TRAFFIC          # OUTCOME_TRAFFIC | OUTCOME_AWARENESS | OUTCOME_ENGAGEMENT | OUTCOME_LEADS | OUTCOME_SALES
+  status: PAUSED                      # PAUSED (review first) or ACTIVE (start immediately)
+  special_ad_categories: []           # CREDIT | EMPLOYMENT | HOUSING | SOCIAL_ISSUES_ELECTIONS_POLITICS
+
+ad_set:
+  name: "Broad Interest - 25-44 - US/CA"
+  daily_budget: 1000                  # In cents. 1000 = $10/day, 5000 = $50/day
+  billing_event: IMPRESSIONS
+  optimization_goal: LINK_CLICKS      # LINK_CLICKS | IMPRESSIONS | REACH | LANDING_PAGE_VIEWS
+  bid_strategy: LOWEST_COST_WITHOUT_CAP
+  targeting:
+    age_min: 25
+    age_max: 44
+    genders: [0]                      # 0 = all, 1 = male, 2 = female
+    countries: ["US", "CA"]
+    interests:
+      - id: "6003139266461"           # Find IDs via Meta Ad Targeting Search API
+        name: "Fitness and wellness"
+      - id: "6003107902433"
+        name: "Nutrition"
+    platforms: ["facebook", "instagram"]
+    facebook_positions: ["feed"]
+    instagram_positions: ["stream", "story", "reels"]
+
+ads:
+  - name: "Feed Ad - V1"
+    image: ./images/feed-1080x1080.png    # Relative to this YAML file
+    primary_text: |
+      Your primary ad text goes here.
+
+      This is the main copy your audience will see.
+      Use line breaks for readability.
+    headline: "Your Headline Here"
+    description: "Short description text."
+    cta: LEARN_MORE                   # LEARN_MORE | SIGN_UP | DOWNLOAD | SHOP_NOW | BOOK_NOW | GET_OFFER
+    link: "https://example.com"
+
+  - name: "Story Ad - V1"
+    image: ./images/story-1080x1920.png
+    primary_text: "Shorter copy works better for stories. Keep it punchy."
+    headline: "Your Headline Here"
+    description: "Short description."
+    cta: LEARN_MORE
+    link: "https://example.com"

@@ -1,0 +1,50 @@
+# E-commerce product launch campaign
+# Target: US women 25-44 interested in skincare
+
+campaign:
+  name: "Summer Collection Launch - June 2026"
+  objective: OUTCOME_SALES
+  status: PAUSED
+
+ad_set:
+  name: "Skincare Enthusiasts - Women 25-44"
+  daily_budget: 2000                  # $20/day
+  optimization_goal: OFFSITE_CONVERSIONS
+  targeting:
+    age_min: 25
+    age_max: 44
+    genders: [2]                      # Women only
+    countries: ["US"]
+    interests:
+      - id: "6003316838894"
+        name: "Skin care"
+      - id: "6003384204254"
+        name: "Beauty"
+      - id: "6003370350791"
+        name: "Cosmetics"
+    platforms: ["facebook", "instagram"]
+    facebook_positions: ["feed"]
+    instagram_positions: ["stream", "story", "reels"]
+
+ads:
+  - name: "Product Hero - Feed"
+    image: ./images/hero-product-1080x1080.png
+    primary_text: |
+      Meet your new summer routine.
+
+      Our Vitamin C serum is clinically tested to reduce dark spots in 4 weeks.
+      Now available in the Summer Collection set.
+
+      Free shipping on orders over $50.
+    headline: "Summer Collection is Here"
+    description: "Free shipping over $50."
+    cta: SHOP_NOW
+    link: "https://yourstore.com/summer-collection?utm_source=meta&utm_medium=paid"
+
+  - name: "Before After - Story"
+    image: ./images/before-after-1080x1920.png
+    primary_text: "4 weeks. Real results. Shop the Summer Collection."
+    headline: "See the Difference"
+    description: "Free shipping over $50."
+    cta: SHOP_NOW
+    link: "https://yourstore.com/summer-collection?utm_source=meta&utm_medium=paid"

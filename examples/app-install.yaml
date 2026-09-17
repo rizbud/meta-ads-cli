@@ -1,0 +1,48 @@
+# Mobile app install campaign
+# Target: US/CA/UK fitness enthusiasts 18-34
+
+campaign:
+  name: "App Launch - Q1 2026"
+  objective: OUTCOME_TRAFFIC          # Use OUTCOME_APP_PROMOTION if your app is registered in Meta
+  status: PAUSED
+
+ad_set:
+  name: "Fitness Enthusiasts - 18-34"
+  daily_budget: 1500                  # $15/day
+  optimization_goal: LINK_CLICKS
+  targeting:
+    age_min: 18
+    age_max: 34
+    genders: [0]
+    countries: ["US", "CA", "GB"]
+    interests:
+      - id: "6003139266461"
+        name: "Fitness and wellness"
+      - id: "6003384248805"
+        name: "Physical fitness"
+      - id: "6003659420716"
+        name: "Weight training"
+    platforms: ["facebook", "instagram"]
+    facebook_positions: ["feed"]
+    instagram_positions: ["stream", "story", "reels"]
+
+ads:
+  - name: "App Screenshot - Feed"
+    image: ./images/app-screenshot-1080x1080.png
+    primary_text: |
+      Track your workouts in 30 seconds.
+
+      No complicated setup. Open the app, tap your exercises, done.
+      Free for 7 days. $4.99/mo after that.
+    headline: "The Workout App That Gets Out of Your Way"
+    description: "Free 7-day trial."
+    cta: DOWNLOAD
+    link: "https://apps.apple.com/app/your-app-name/id1234567890"
+
+  - name: "Feature Highlight - Story"
+    image: ./images/feature-highlight-1080x1920.png
+    primary_text: "Finally, a workout tracker that takes 30 seconds. Try free."
+    headline: "Track Workouts in 30 Seconds"
+    description: "Free 7-day trial."
+    cta: DOWNLOAD
+    link: "https://apps.apple.com/app/your-app-name/id1234567890"
