@@ -653,3 +653,82 @@ func TestDryRunPreviewOutput(t *testing.T) {
 		t.Errorf("preview should include params: %q", s)
 	}
 }
+
+func TestGetAdAccountCoercesNumericFields(t *testing.T) {
+	srv, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, 200, map[string]any{
+			"id":             "act_123456",
+			"name":           "My Account",
+			"account_status": 1,
+			"amount_spent":   12345,
+			"balance":        67.5,
+		})
+	})
+	c := newClient(t, srv)
+	data, err := c.GetAdAccount()
+	if err != nil {
+		t.Fatalf("GetAdAccount: %v", err)
+	}
+	if data["amount_spent"] != "12345" {
+		t.Errorf("amount_spent = %q, want 12345", data["amount_spent"])
+	}
+	if data["balance"] != "67.5" {
+		t.Errorf("balance = %q, want 67.5", data["balance"])
+	}
+	if data["account_status"] != "1" {
+		t.Errorf("account_status = %q, want 1", data["account_status"])
+	}
+	if data["name"] != "My Account" {
+		t.Errorf("name = %q", data["name"])
+	}
+}
+
+func TestListAdSetsCoercesNumericBudget(t *testing.T) {
+	srv, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, 200, map[string]any{
+			"data": []map[string]any{
+				{"id": "s1", "name": "Set", "status": "PAUSED", "daily_budget": 2500},
+			},
+		})
+	})
+	c := newClient(t, srv)
+	rows, err := c.ListAdSets(10)
+	if err != nil {
+		t.Fatalf("ListAdSets: %v", err)
+	}
+	if len(rows) != 1 || rows[0]["daily_budget"] != "2500" {
+		t.Errorf("rows = %v", rows)
+	}
+}
+
+func TestGetInsightsCoercesNumericAndArrayFields(t *testing.T) {
+	srv, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, 200, map[string]any{
+			"data": []map[string]any{
+				{
+					"spend":       "12.34",
+					"clicks":      10,
+					"impressions": 1500,
+					"ctr":         0.6667,
+					"actions": []map[string]any{
+						{"action_type": "link_click", "value": 3},
+					},
+				},
+			},
+		})
+	})
+	c := newClient(t, srv)
+	rows, err := c.GetInsights(GetInsightsParams{ObjectID: "act_123456", DatePreset: "last_7d", Limit: 25})
+	if err != nil {
+		t.Fatalf("GetInsights: %v", err)
+	}
+	if rows[0]["clicks"] != "10" || rows[0]["impressions"] != "1500" {
+		t.Errorf("numeric coercion failed: %v", rows[0])
+	}
+	if rows[0]["ctr"] != "0.6667" {
+		t.Errorf("ctr = %q, want 0.6667", rows[0]["ctr"])
+	}
+	if !strings.Contains(rows[0]["actions"], "link_click") {
+		t.Errorf("actions = %q, want JSON containing link_click", rows[0]["actions"])
+	}
+}

@@ -123,8 +123,8 @@ func TestRootVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("version: %v", err)
 	}
-	if !strings.Contains(out, "0.2.0") {
-		t.Errorf("version output = %q", out)
+	if !strings.Contains(out, Version) {
+		t.Errorf("version output = %q, want it to contain %q", out, Version)
 	}
 }
 

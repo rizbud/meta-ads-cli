@@ -8,6 +8,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -189,12 +190,56 @@ func extractID(body []byte) (string, error) {
 
 func listData(body []byte) ([]map[string]string, error) {
 	var result struct {
-		Data []map[string]string `json:"data"`
+		Data []map[string]any `json:"data"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, err
 	}
-	return result.Data, nil
+	rows := make([]map[string]string, 0, len(result.Data))
+	for _, raw := range result.Data {
+		rows = append(rows, coerceStringMap(raw))
+	}
+	return rows, nil
+}
+
+// decodeObject decodes a JSON object into string-keyed string values,
+// coercing non-string fields (numbers, booleans, nested structures) to
+// their JSON string form so a numeric API field never breaks decoding.
+func decodeObject(body []byte) (map[string]string, error) {
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	return coerceStringMap(raw), nil
+}
+
+func coerceStringMap(raw map[string]any) map[string]string {
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		out[k] = stringifyField(v)
+	}
+	return out
+}
+
+func stringifyField(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	case json.Number:
+		return t.String()
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		b, err := json.Marshal(t)
+		if err != nil {
+			return fmt.Sprintf("%v", t)
+		}
+		return string(b)
+	}
 }
 
 // CreateCampaignParams configures campaign creation.
@@ -460,11 +505,7 @@ func (c *Client) GetCampaign(campaignID, fields string) (map[string]string, erro
 	if err != nil {
 		return nil, err
 	}
-	var data map[string]string
-	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, err
-	}
-	return data, nil
+	return decodeObject(body)
 }
 
 // GetAdAccount fetches configured ad account details.
@@ -473,11 +514,7 @@ func (c *Client) GetAdAccount() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var data map[string]string
-	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, err
-	}
-	return data, nil
+	return decodeObject(body)
 }
 
 // ListCampaigns lists campaigns in the configured ad account.
