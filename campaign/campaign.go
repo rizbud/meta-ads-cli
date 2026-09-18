@@ -9,6 +9,7 @@ import (
 
 	"github.com/rizbud/meta-ads-cli/api"
 	"github.com/rizbud/meta-ads-cli/config"
+	"github.com/rizbud/meta-ads-cli/money"
 )
 
 // Creator is the subset of the Meta API client the campaign orchestrator needs.
@@ -151,7 +152,7 @@ type StatusAPI interface {
 
 // PrintCampaignStatus fetches and prints a campaign summary with ad sets and
 // ads to w.
-func PrintCampaignStatus(w io.Writer, client StatusAPI, campaignID string) error {
+func PrintCampaignStatus(w io.Writer, client StatusAPI, campaignID, currency string) error {
 	campaign, err := client.GetCampaign(campaignID, "name,status,objective,daily_budget")
 	if err != nil {
 		return err
@@ -173,7 +174,7 @@ func PrintCampaignStatus(w io.Writer, client StatusAPI, campaignID string) error
 		for _, adSet := range adSets {
 			budget := 0
 			fmt.Sscanf(adSet["daily_budget"], "%d", &budget)
-			fmt.Fprintf(w, "    %s: %s ($%.2f/day)\n", adSet["name"], adSet["status"], float64(budget)/100)
+			fmt.Fprintf(w, "    %s: %s (%s/day)\n", adSet["name"], adSet["status"], money.Format(int64(budget), currency))
 		}
 	}
 

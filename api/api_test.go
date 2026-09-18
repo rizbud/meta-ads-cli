@@ -709,6 +709,32 @@ func TestListAdSetsCoercesNumericBudget(t *testing.T) {
 	}
 }
 
+func TestCurrencyFetchesOnceAndCaches(t *testing.T) {
+	srv, reqs := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, 200, map[string]any{"currency": "idr"})
+	})
+	c := newClient(t, srv)
+	if got := c.Currency(); got != "IDR" {
+		t.Fatalf("Currency() = %q, want IDR", got)
+	}
+	if got := c.Currency(); got != "IDR" {
+		t.Fatalf("cached Currency() = %q, want IDR", got)
+	}
+	if len(*reqs) != 1 {
+		t.Fatalf("requests = %d, want 1 (cached)", len(*reqs))
+	}
+	if (*reqs)[0].path != "/act_123456" || (*reqs)[0].query.Get("fields") != "currency" {
+		t.Errorf("request = %+v", (*reqs)[0])
+	}
+}
+
+func TestCurrencyDryRunMakesNoRequest(t *testing.T) {
+	c := New(Config{AdAccountID: "1", DryRun: true})
+	if got := c.Currency(); got != "" {
+		t.Errorf("Currency() in dry run = %q, want empty", got)
+	}
+}
+
 func TestGetInsightsCoercesNumericAndArrayFields(t *testing.T) {
 	srv, _ := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 200, map[string]any{

@@ -131,6 +131,7 @@ Long-lived tokens last about 60 days.
 | `META_AD_ACCOUNT_ID`               | Yes      | Your ad account ID (numbers only, no `act_` prefix) |
 | `META_PAGE_ID`                     | Yes      | Your Facebook Page ID                               |
 | `META_API_VERSION`                 | No       | API version (default: `v21.0`)                      |
+| `META_CURRENCY`                    | No       | Currency code for budget amounts in offline commands (`validate`, `--dry-run`). Live commands read it from your account. |
 | `META_ADS_MAX_DAILY_BUDGET_CENTS`  | No       | Optional daily budget guardrail                     |
 | `META_ADS_AUDIT_LOG_PATH`          | No       | Optional JSONL audit log path (default: `~/.meta-ads-cli/audit.jsonl`) |
 

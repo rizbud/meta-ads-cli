@@ -70,6 +70,7 @@ type Client struct {
 	dryRunNumber int
 	httpClient   *http.Client
 	dryRunOut    io.Writer
+	currency     string
 
 	// PartialCampaignResult is set by the campaign orchestrator when a
 	// creation fails partway, to preserve what was already created.
@@ -111,6 +112,30 @@ func (c *Client) ActID() string {
 // SetDryRunOut enables dry-run preview output to w.
 func (c *Client) SetDryRunOut(w io.Writer) {
 	c.dryRunOut = w
+}
+
+// Currency returns the configured ad account's ISO 4217 currency code,
+// fetching it once and caching the result. It returns an empty string if the
+// lookup fails or in dry-run mode, where no API calls are made.
+func (c *Client) Currency() string {
+	if c.currency != "" {
+		return c.currency
+	}
+	if c.DryRun {
+		return ""
+	}
+	body, err := c.request(http.MethodGet, c.ActID(), url.Values{"fields": {"currency"}})
+	if err != nil {
+		return ""
+	}
+	var data struct {
+		Currency string `json:"currency"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return ""
+	}
+	c.currency = strings.ToUpper(strings.TrimSpace(data.Currency))
+	return c.currency
 }
 
 // request performs an API request, defaulting to query-string params. In dry

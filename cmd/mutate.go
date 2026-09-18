@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/rizbud/meta-ads-cli/api"
+	"github.com/rizbud/meta-ads-cli/money"
 )
 
 func apiUploadParams(filePath, base string, data []byte) api.UploadImageParams {
@@ -160,9 +161,14 @@ func newBudgetCommand(r *Runner) *cobra.Command {
 				fmt.Fprintf(out, "Budget error: %s\n", err)
 				return errNonZero
 			}
+			client, err := r.NewClient(dryRun)
+			if err != nil {
+				fmt.Fprintf(out, "%s\n", err)
+				return errNonZero
+			}
+			currency := currencyFor(client, dryRun)
 			if !dryRun && !yes {
-				dollars := float64(dailyBudgetCents) / 100
-				if !r.Confirm(fmt.Sprintf("Set %s to $%.2f/day?", objectID, dollars)) {
+				if !r.Confirm(fmt.Sprintf("Set %s to %s/day?", objectID, money.Format(int64(dailyBudgetCents), currency))) {
 					fmt.Fprintln(out, "Aborted.")
 					return nil
 				}
@@ -172,11 +178,6 @@ func newBudgetCommand(r *Runner) *cobra.Command {
 					fmt.Fprintf(out, "%s\n", err)
 					return errNonZero
 				}
-			}
-			client, err := r.NewClient(dryRun)
-			if err != nil {
-				fmt.Fprintf(out, "%s\n", err)
-				return errNonZero
 			}
 			if err := client.UpdateDailyBudget(objectID, dailyBudgetCents); err != nil {
 				fmt.Fprintf(out, "API Error: %s\n", err)

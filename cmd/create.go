@@ -8,6 +8,7 @@ import (
 	"github.com/rizbud/meta-ads-cli/api"
 	"github.com/rizbud/meta-ads-cli/campaign"
 	"github.com/rizbud/meta-ads-cli/config"
+	"github.com/rizbud/meta-ads-cli/money"
 )
 
 func newCreateCommand(r *Runner) *cobra.Command {
@@ -31,16 +32,30 @@ func newCreateCommand(r *Runner) *cobra.Command {
 				return errNonZero
 			}
 
+			if err := checkDailyBudgetLimit(cfg.AdSet.DailyBudget, "create"); err != nil {
+				fmt.Fprintf(out, "Budget error: %s\n", err)
+				return errNonZero
+			}
+
+			client, err := r.NewClient(dryRun)
+			if err != nil {
+				fmt.Fprintf(out, "%s\n", err)
+				return errNonZero
+			}
+			if dryRun {
+				client.SetDryRunOut(out)
+			}
+			currency := currencyFor(client, dryRun)
+
 			campaignName := cfg.Campaign.Name
 			status := cfg.Campaign.Status
-			budget := float64(cfg.AdSet.DailyBudget) / 100
 			numAds := len(cfg.Ads)
 
 			fmt.Fprintln(out, "==================================================")
 			fmt.Fprintln(out, "meta-ads create")
 			fmt.Fprintln(out, "==================================================")
 			fmt.Fprintf(out, "Campaign:  %s\n", campaignName)
-			fmt.Fprintf(out, "Budget:    $%.2f/day\n", budget)
+			fmt.Fprintf(out, "Budget:    %s/day\n", money.Format(int64(cfg.AdSet.DailyBudget), currency))
 			fmt.Fprintf(out, "Ads:       %d\n", numAds)
 			fmt.Fprintf(out, "Status:    %s\n", status)
 			mode := "DRY RUN"
@@ -48,11 +63,6 @@ func newCreateCommand(r *Runner) *cobra.Command {
 				mode = "LIVE"
 			}
 			fmt.Fprintf(out, "Mode:      %s\n", mode)
-
-			if err := checkDailyBudgetLimit(cfg.AdSet.DailyBudget, "create"); err != nil {
-				fmt.Fprintf(out, "Budget error: %s\n", err)
-				return errNonZero
-			}
 
 			if !dryRun && !yes {
 				fmt.Fprintln(out)
@@ -67,15 +77,6 @@ func newCreateCommand(r *Runner) *cobra.Command {
 					fmt.Fprintf(out, "%s\n", err)
 					return errNonZero
 				}
-			}
-
-			client, err := r.NewClient(dryRun)
-			if err != nil {
-				fmt.Fprintf(out, "%s\n", err)
-				return errNonZero
-			}
-			if dryRun {
-				client.SetDryRunOut(out)
 			}
 
 			request := map[string]any{
@@ -176,10 +177,10 @@ func newValidateCommand() *cobra.Command {
 				fmt.Fprintf(out, "Validation failed:\n%s\n", err)
 				return errNonZero
 			}
-			budget := float64(cfg.AdSet.DailyBudget) / 100
+			currency := currencyFor(nil, true)
 			fmt.Fprintln(out, "Config is valid.")
 			fmt.Fprintf(out, "  Campaign: %s\n", cfg.Campaign.Name)
-			fmt.Fprintf(out, "  Budget:   $%.2f/day\n", budget)
+			fmt.Fprintf(out, "  Budget:   %s/day\n", money.Format(int64(cfg.AdSet.DailyBudget), currency))
 			fmt.Fprintf(out, "  Ads:      %d\n", len(cfg.Ads))
 			return nil
 		},

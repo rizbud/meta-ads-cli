@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/rizbud/meta-ads-cli/api"
 	"github.com/rizbud/meta-ads-cli/campaign"
+	"github.com/rizbud/meta-ads-cli/money"
 )
 
 func newAccountCommand(r *Runner) *cobra.Command {
@@ -31,10 +34,15 @@ func newAccountCommand(r *Runner) *cobra.Command {
 				return nil
 			}
 			fmt.Fprintln(out, "Meta ad account")
+			currency := strings.ToUpper(data["currency"])
 			for _, key := range []string{"id", "name", "account_status", "currency", "timezone_name", "amount_spent", "balance"} {
 				val, ok := data[key]
 				if !ok {
 					val = "N/A"
+				} else if key == "amount_spent" || key == "balance" {
+					if n, err := strconv.ParseInt(val, 10, 64); err == nil {
+						val = money.Format(n, currency)
+					}
 				}
 				fmt.Fprintf(out, "  %s: %s\n", key, val)
 			}
@@ -198,7 +206,7 @@ func newStatusCommand(r *Runner) *cobra.Command {
 				fmt.Fprintf(out, "%s\n", err)
 				return errNonZero
 			}
-			if err := campaign.PrintCampaignStatus(out, client, args[0]); err != nil {
+			if err := campaign.PrintCampaignStatus(out, client, args[0], currencyFor(client, false)); err != nil {
 				fmt.Fprintf(out, "API Error: %s\n", err)
 				return errNonZero
 			}

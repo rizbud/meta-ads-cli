@@ -149,15 +149,31 @@ func TestSetupChatGPTNotesHosted(t *testing.T) {
 }
 
 func TestValidateValidConfig(t *testing.T) {
+	t.Setenv("META_CURRENCY", "IDR")
 	path := writeConfigFile(t, sampleYAML)
 	out, err := runCmd(t, testRunner(t, nil), "validate", "--config", path)
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	for _, want := range []string{"Config is valid.", "Campaign: My Campaign", "$10.00/day"} {
+	for _, want := range []string{"Config is valid.", "Campaign: My Campaign", "IDR 10.00/day"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in: %s", want, out)
 		}
+	}
+}
+
+func TestValidateWithoutCurrencyOmitsSymbol(t *testing.T) {
+	t.Setenv("META_CURRENCY", "")
+	path := writeConfigFile(t, sampleYAML)
+	out, err := runCmd(t, testRunner(t, nil), "validate", "--config", path)
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if !strings.Contains(out, "Budget:   10.00/day") {
+		t.Errorf("output = %q", out)
+	}
+	if strings.Contains(out, "$") {
+		t.Errorf("output must not hardcode a currency symbol: %q", out)
 	}
 }
 
@@ -229,6 +245,7 @@ func TestCreateLiveYes(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 	wantPaths := []string{
+		"/act_123456",
 		"/act_123456/campaigns",
 		"/act_123456/adsets",
 		"/act_123456/adcreatives",
@@ -299,6 +316,25 @@ func TestAccountJSON(t *testing.T) {
 	}
 }
 
+func TestAccountFormatsAmountsWithAccountCurrency(t *testing.T) {
+	srv, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonResp(w, 200, map[string]any{
+			"id": "act_123456", "name": "Acme", "currency": "IDR",
+			"amount_spent": 1051167, "balance": 0,
+		})
+	})
+	out, err := runCmd(t, testRunner(t, srv), "account")
+	if err != nil {
+		t.Fatalf("account: %v", err)
+	}
+	if !strings.Contains(out, "amount_spent: IDR 10511.67") {
+		t.Errorf("amount_spent not formatted: %q", out)
+	}
+	if !strings.Contains(out, "balance: IDR 0.00") {
+		t.Errorf("balance not formatted: %q", out)
+	}
+}
+
 func TestCampaignsJSON(t *testing.T) {
 	srv, reqs := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		jsonResp(w, 200, map[string]any{"data": []map[string]any{{"id": "1", "name": "A", "status": "PAUSED"}}})
@@ -362,6 +398,8 @@ func TestInsightsJSON(t *testing.T) {
 func TestStatusCommand(t *testing.T) {
 	srv, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/act_123456":
+			jsonResp(w, 200, map[string]any{"currency": "IDR"})
 		case "/camp123":
 			jsonResp(w, 200, map[string]any{"id": "camp123", "name": "Big", "status": "PAUSED", "objective": "OUTCOME_TRAFFIC"})
 		case "/camp123/adsets":
@@ -374,7 +412,7 @@ func TestStatusCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if !strings.Contains(out, "Campaign: Big") || !strings.Contains(out, "Set: PAUSED ($10.00/day)") {
+	if !strings.Contains(out, "Campaign: Big") || !strings.Contains(out, "Set: PAUSED (IDR 10.00/day)") {
 		t.Errorf("output = %q", out)
 	}
 }
@@ -481,8 +519,14 @@ func TestBudgetLiveYes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("budget: %v", err)
 	}
-	if (*reqs)[0].path != "/camp123" || (*reqs)[0].query.Get("daily_budget") != "3000" {
-		t.Errorf("req = %+v", (*reqs)[0])
+	var found bool
+	for _, r := range *reqs {
+		if r.path == "/camp123" && r.query.Get("daily_budget") == "3000" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("missing budget request, got %+v", *reqs)
 	}
 	raw, _ := os.ReadFile(auditPath)
 	if !strings.Contains(string(raw), `"action":"budget"`) {

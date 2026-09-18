@@ -344,7 +344,7 @@ func TestPrintCampaignStatus(t *testing.T) {
 		},
 	}
 	var out strings.Builder
-	if err := PrintCampaignStatus(&out, api, "camp_123"); err != nil {
+	if err := PrintCampaignStatus(&out, api, "camp_123", "USD"); err != nil {
 		t.Fatalf("PrintCampaignStatus: %v", err)
 	}
 	s := out.String()
@@ -353,7 +353,7 @@ func TestPrintCampaignStatus(t *testing.T) {
 		"ID: camp_123",
 		"Status: PAUSED",
 		"Objective: OUTCOME_TRAFFIC",
-		"Broad: ACTIVE ($10.00/day)",
+		"Broad: ACTIVE (USD 10.00/day)",
 		"Feed Ad: ACTIVE",
 	} {
 		if !strings.Contains(s, want) {
@@ -371,7 +371,7 @@ func TestPrintCampaignStatusUsesEffectiveStatus(t *testing.T) {
 		},
 	}
 	var out strings.Builder
-	if err := PrintCampaignStatus(&out, api, "1"); err != nil {
+	if err := PrintCampaignStatus(&out, api, "1", "USD"); err != nil {
 		t.Fatalf("PrintCampaignStatus: %v", err)
 	}
 	if !strings.Contains(out.String(), "Ad: ARCHIVED") {
@@ -382,7 +382,7 @@ func TestPrintCampaignStatusUsesEffectiveStatus(t *testing.T) {
 func TestPrintCampaignStatusError(t *testing.T) {
 	api := &statusAPI{campaignErr: errors.New("api down")}
 	var out strings.Builder
-	if err := PrintCampaignStatus(&out, api, "1"); err == nil {
+	if err := PrintCampaignStatus(&out, api, "1", "USD"); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -394,10 +394,10 @@ func TestPrintCampaignStatusZeroBudgetFormat(t *testing.T) {
 		ads:      []map[string]string{},
 	}
 	var out strings.Builder
-	if err := PrintCampaignStatus(&out, api, "1"); err != nil {
+	if err := PrintCampaignStatus(&out, api, "1", "USD"); err != nil {
 		t.Fatalf("PrintCampaignStatus: %v", err)
 	}
-	if !strings.Contains(out.String(), "Set: PAUSED ($0.00/day)") {
+	if !strings.Contains(out.String(), "Set: PAUSED (USD 0.00/day)") {
 		t.Errorf("output = %q", out.String())
 	}
 }
