@@ -15,6 +15,7 @@ Read from the environment or `.env` in the current directory. **All three are re
 - `META_AD_ACCOUNT_ID` — numbers only, no `act_` prefix (required)
 - `META_PAGE_ID` (required)
 - `META_API_VERSION` — default `v21.0`
+- `META_CURRENCY` — currency code for offline budget display (`validate`, `--dry-run`); live commands read it from your account
 - `META_ADS_MAX_DAILY_BUDGET_CENTS` — budget change guardrail
 - `META_ADS_AUDIT_LOG_PATH` — default `~/.meta-ads-cli/audit.jsonl`
 
