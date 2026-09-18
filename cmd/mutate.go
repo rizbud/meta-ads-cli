@@ -29,7 +29,8 @@ func apiErrorCode(err error) int {
 }
 
 func newPauseCommand(r *Runner) *cobra.Command {
-	return &cobra.Command{
+	var yes bool
+	cmd := &cobra.Command{
 		Use:   "pause <campaign-id>",
 		Short: "Pause a campaign.",
 		Args:  cobra.ExactArgs(1),
@@ -56,6 +57,8 @@ func newPauseCommand(r *Runner) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "No-op; accepted for consistency with other mutating commands.")
+	return cmd
 }
 
 func newActivateCommand(r *Runner) *cobra.Command {

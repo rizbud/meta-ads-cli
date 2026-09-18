@@ -438,6 +438,22 @@ func TestPauseCommand(t *testing.T) {
 	}
 }
 
+func TestPauseAcceptsYesFlag(t *testing.T) {
+	srv, reqs := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonResp(w, 200, map[string]any{"success": true})
+	})
+	out, err := runCmd(t, testRunner(t, srv), "pause", "camp123", "--yes")
+	if err != nil {
+		t.Fatalf("pause --yes: %v", err)
+	}
+	if !strings.Contains(out, "paused") {
+		t.Errorf("output = %q", out)
+	}
+	if (*reqs)[0].query.Get("status") != "PAUSED" {
+		t.Errorf("status = %q", (*reqs)[0].query.Get("status"))
+	}
+}
+
 func TestActivateYes(t *testing.T) {
 	auditPath := auditDir(t)
 	srv, reqs := newServer(t, func(w http.ResponseWriter, r *http.Request) {
