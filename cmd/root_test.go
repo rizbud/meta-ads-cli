@@ -155,7 +155,7 @@ func TestValidateValidConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	for _, want := range []string{"Config is valid.", "Campaign: My Campaign", "IDR 10.00/day"} {
+	for _, want := range []string{"Config is valid.", "Campaign: My Campaign", "IDR 1,000/day"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in: %s", want, out)
 		}
@@ -327,10 +327,10 @@ func TestAccountFormatsAmountsWithAccountCurrency(t *testing.T) {
 	if err != nil {
 		t.Fatalf("account: %v", err)
 	}
-	if !strings.Contains(out, "amount_spent: IDR 10511.67") {
+	if !strings.Contains(out, "amount_spent: IDR 1,051,167") {
 		t.Errorf("amount_spent not formatted: %q", out)
 	}
-	if !strings.Contains(out, "balance: IDR 0.00") {
+	if !strings.Contains(out, "balance: IDR 0") {
 		t.Errorf("balance not formatted: %q", out)
 	}
 }
@@ -412,7 +412,7 @@ func TestStatusCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if !strings.Contains(out, "Campaign: Big") || !strings.Contains(out, "Set: PAUSED (IDR 10.00/day)") {
+	if !strings.Contains(out, "Campaign: Big") || !strings.Contains(out, "Set: PAUSED (IDR 1,000/day)") {
 		t.Errorf("output = %q", out)
 	}
 }
