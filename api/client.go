@@ -425,10 +425,13 @@ func (c *Client) CreateAdSet(p CreateAdSetParams) (string, error) {
 	return extractID(body)
 }
 
-// CreateAdCreativeParams configures ad creative creation.
+// CreateAdCreativeParams configures ad creative creation. Set VideoID (plus
+// ImageHash as the video's cover thumbnail) for a video ad, or ImageHash
+// alone for an image ad.
 type CreateAdCreativeParams struct {
 	Name        string
 	ImageHash   string
+	VideoID     string
 	PrimaryText string
 	Headline    string
 	Description string
@@ -438,18 +441,36 @@ type CreateAdCreativeParams struct {
 
 // CreateAdCreative creates an ad creative and returns its ID.
 func (c *Client) CreateAdCreative(p CreateAdCreativeParams) (string, error) {
+	callToAction := map[string]any{
+		"type":  p.CTA,
+		"value": map[string]any{"link": p.Link},
+	}
+
+	var data map[string]any
+	dataKey := "link_data"
+	if p.VideoID != "" {
+		dataKey = "video_data"
+		data = map[string]any{
+			"video_id":         p.VideoID,
+			"image_hash":       p.ImageHash,
+			"title":            p.Headline,
+			"message":          p.PrimaryText,
+			"link_description": p.Description,
+			"call_to_action":   callToAction,
+		}
+	} else {
+		data = map[string]any{
+			"image_hash":     p.ImageHash,
+			"link":           p.Link,
+			"message":        p.PrimaryText,
+			"name":           p.Headline,
+			"description":    p.Description,
+			"call_to_action": callToAction,
+		}
+	}
+
 	story := map[string]any{
-		"link_data": map[string]any{
-			"image_hash":  p.ImageHash,
-			"link":        p.Link,
-			"message":     p.PrimaryText,
-			"name":        p.Headline,
-			"description": p.Description,
-			"call_to_action": map[string]any{
-				"type":  p.CTA,
-				"value": map[string]any{"link": p.Link},
-			},
-		},
+		dataKey:   data,
 		"page_id": c.PageID,
 	}
 	storyJSON, _ := json.Marshal(story)
@@ -551,6 +572,71 @@ func (c *Client) UploadImage(p UploadImageParams) (string, error) {
 		}
 	}
 	return "", &APIError{StatusCode: 0, Message: fmt.Sprintf("Unexpected image upload response: %s", string(body))}
+}
+
+// UploadVideoParams configures a video upload.
+type UploadVideoParams struct {
+	FilePath string
+	FileName string
+	Data     []byte
+}
+
+// UploadVideo uploads an ad video to the ad account and returns its video
+// ID. Meta processes the video asynchronously after upload; the returned ID
+// can be used to create a video ad creative once processing finishes (check
+// with GetVideoStatus).
+func (c *Client) UploadVideo(p UploadVideoParams) (string, error) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("source", p.FileName)
+	if err != nil {
+		return "", err
+	}
+	if _, err := part.Write(p.Data); err != nil {
+		return "", err
+	}
+	if err := mw.Close(); err != nil {
+		return "", err
+	}
+
+	if c.DryRun {
+		c.dryRunNumber++
+		if c.dryRunOut != nil {
+			fmt.Fprintf(c.dryRunOut, "  [DRY RUN] POST %s/advideos\n", strings.TrimPrefix(c.ActID(), "/"))
+			fmt.Fprintf(c.dryRunOut, "  Files: [%s]\n", p.FileName)
+		}
+		return "dry_run_video_id", nil
+	}
+
+	params := url.Values{"access_token": {c.AccessToken}}
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/"+c.ActID()+"/advideos"+"?"+params.Encode(), &buf)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", parseAPIError(resp.StatusCode, body)
+	}
+	return extractID(body)
+}
+
+// GetVideoStatus fetches a video's processing status. video_status.video_status
+// is "ready" once the video can be used in an ad creative.
+func (c *Client) GetVideoStatus(videoID string) (map[string]string, error) {
+	body, err := c.request(http.MethodGet, videoID, url.Values{"fields": {"status"}})
+	if err != nil {
+		return nil, err
+	}
+	return decodeObject(body)
 }
 
 // GetCampaign fetches campaign details.

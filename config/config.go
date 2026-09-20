@@ -90,10 +90,14 @@ type InterestConfig struct {
 	Name string `yaml:"name"`
 }
 
-// AdConfig holds an entry in the ads section of a config file.
+// AdConfig holds an entry in the ads section of a config file. An ad is
+// either an image ad (Image) or a video ad (Video + Thumbnail); exactly one
+// of Image or Video must be set.
 type AdConfig struct {
 	Name        string `yaml:"name"`
 	Image       string `yaml:"image"`
+	Video       string `yaml:"video"`
+	Thumbnail   string `yaml:"thumbnail"`
 	PrimaryText string `yaml:"primary_text"`
 	Headline    string `yaml:"headline"`
 	Description string `yaml:"description"`
@@ -101,8 +105,13 @@ type AdConfig struct {
 	Link        string `yaml:"link"`
 }
 
-// LoadConfig reads and parses a campaign YAML config file. Image paths are
-// resolved relative to the YAML file's directory.
+// IsVideo reports whether the ad is a video ad rather than an image ad.
+func (a AdConfig) IsVideo() bool {
+	return a.Video != ""
+}
+
+// LoadConfig reads and parses a campaign YAML config file. Image, video, and
+// thumbnail paths are resolved relative to the YAML file's directory.
 func LoadConfig(path string) (*Config, error) {
 	if _, err := os.Stat(path); err != nil {
 		return nil, fmt.Errorf("config file not found: %s", path)
@@ -122,6 +131,12 @@ func LoadConfig(path string) (*Config, error) {
 	for i := range cfg.Ads {
 		if cfg.Ads[i].Image != "" && !filepath.IsAbs(cfg.Ads[i].Image) {
 			cfg.Ads[i].Image = filepath.Join(dir, cfg.Ads[i].Image)
+		}
+		if cfg.Ads[i].Video != "" && !filepath.IsAbs(cfg.Ads[i].Video) {
+			cfg.Ads[i].Video = filepath.Join(dir, cfg.Ads[i].Video)
+		}
+		if cfg.Ads[i].Thumbnail != "" && !filepath.IsAbs(cfg.Ads[i].Thumbnail) {
+			cfg.Ads[i].Thumbnail = filepath.Join(dir, cfg.Ads[i].Thumbnail)
 		}
 	}
 	return cfg, nil
@@ -175,39 +190,71 @@ func ValidateConfig(c *Config) error {
 	if len(c.Ads) == 0 {
 		errs = append(errs, "Missing 'ads' section (need at least one ad)")
 	}
-	for i, ad := range c.Ads {
+	for i := range c.Ads {
 		prefix := fmt.Sprintf("ads[%d]", i)
-		if ad.Name == "" {
-			errs = append(errs, prefix+".name is required")
-		}
-		if ad.Image == "" {
-			errs = append(errs, prefix+".image is required")
-		} else if _, err := os.Stat(ad.Image); err != nil {
-			errs = append(errs, fmt.Sprintf("%s.image not found: %s", prefix, ad.Image))
-		}
-		if ad.PrimaryText == "" {
-			errs = append(errs, prefix+".primary_text is required")
-		}
-		if ad.Headline == "" {
-			errs = append(errs, prefix+".headline is required")
-		}
-		if ad.Link == "" {
-			errs = append(errs, prefix+".link is required")
-		}
-		cta := ad.CTA
-		if cta == "" {
-			cta = "LEARN_MORE"
-			c.Ads[i].CTA = cta
-		}
-		if !contains(validCTAs, cta) {
-			errs = append(errs, fmt.Sprintf("%s.cta '%s' is not valid. Options: %s", prefix, cta, strings.Join(validCTAs, ", ")))
-		}
+		adErrs, cta := validateAd(c.Ads[i], prefix)
+		c.Ads[i].CTA = cta
+		errs = append(errs, adErrs...)
 	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("%s", strings.Join(errs, "\n"))
 	}
 	return nil
+}
+
+// ValidateAd validates a single ad, returning all problems found. It applies
+// the default CTA and returns the resolved ad so callers (e.g. a command
+// that attaches one ad to an already-existing ad set) can reuse the same
+// rules the full campaign config uses.
+func ValidateAd(ad AdConfig) (AdConfig, error) {
+	errs, cta := validateAd(ad, "ad")
+	ad.CTA = cta
+	if len(errs) > 0 {
+		return ad, fmt.Errorf("%s", strings.Join(errs, "\n"))
+	}
+	return ad, nil
+}
+
+func validateAd(ad AdConfig, prefix string) (errs []string, cta string) {
+	if ad.Name == "" {
+		errs = append(errs, prefix+".name is required")
+	}
+	if ad.Image == "" && ad.Video == "" {
+		errs = append(errs, prefix+".image or "+prefix+".video is required")
+	} else if ad.Image != "" && ad.Video != "" {
+		errs = append(errs, prefix+" cannot set both image and video")
+	} else if ad.Image != "" {
+		if _, err := os.Stat(ad.Image); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.image not found: %s", prefix, ad.Image))
+		}
+	} else {
+		if _, err := os.Stat(ad.Video); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.video not found: %s", prefix, ad.Video))
+		}
+		if ad.Thumbnail == "" {
+			errs = append(errs, prefix+".thumbnail is required for video ads (a still image Meta uses as the cover)")
+		} else if _, err := os.Stat(ad.Thumbnail); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.thumbnail not found: %s", prefix, ad.Thumbnail))
+		}
+	}
+	if ad.PrimaryText == "" {
+		errs = append(errs, prefix+".primary_text is required")
+	}
+	if ad.Headline == "" {
+		errs = append(errs, prefix+".headline is required")
+	}
+	if ad.Link == "" {
+		errs = append(errs, prefix+".link is required")
+	}
+	cta = ad.CTA
+	if cta == "" {
+		cta = "LEARN_MORE"
+	}
+	if !contains(validCTAs, cta) {
+		errs = append(errs, fmt.Sprintf("%s.cta '%s' is not valid. Options: %s", prefix, cta, strings.Join(validCTAs, ", ")))
+	}
+	return errs, cta
 }
 
 // IsEmpty reports whether no sections were parsed from YAML.

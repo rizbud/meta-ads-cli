@@ -26,6 +26,8 @@ One campaign. One ad set. Multiple ads. You also get account lookup, campaign li
   - [insights](#insights)
   - [budget <object-id> <daily-budget-cents>](#budget-object-id-daily-budget-cents)
   - [upload-image <image-path>](#upload-image-image-path)
+  - [upload-video <video-path>](#upload-video-video-path)
+  - [add-ad <ad-set-id>](#add-ad-ad-set-id)
   - [bulk-status <status> <campaign-id...>](#bulk-status-status-campaign-id)
   - [pause / activate / delete](#pause--activate--delete)
   - [validate](#validate)
@@ -168,9 +170,19 @@ ads:
     description: "Short description"
     cta: LEARN_MORE                 # LEARN_MORE | SIGN_UP | DOWNLOAD | SHOP_NOW | BOOK_NOW | GET_OFFER | SUBSCRIBE | CONTACT_US | APPLY_NOW | WATCH_MORE
     link: "https://example.com"
+
+  - name: "My Reel Ad"               # Video ad: use `video` + `thumbnail` instead of `image`
+    video: ./videos/reel.mp4
+    thumbnail: ./images/reel-cover.png  # Still image Meta shows as the video's cover
+    primary_text: "Your ad copy."
+    headline: "Your Headline"
+    cta: SHOP_NOW
+    link: "https://example.com"
 ```
 
 **CTA Options:** `LEARN_MORE`, `SIGN_UP`, `DOWNLOAD`, `SHOP_NOW`, `BOOK_NOW`, `GET_OFFER`, `SUBSCRIBE`, `CONTACT_US`, `APPLY_NOW`, `WATCH_MORE`
+
+Each ad is either an image ad (`image`) or a video ad (`video` + `thumbnail`) — set exactly one. Video ads are uploaded via the Marketing API's `/advideos` endpoint and processed asynchronously by Meta; the ad creative is created immediately after upload, which is normally fine, but if Meta rejects it with a "video not ready" style error, wait a minute and re-run.
 
 ## Commands
 
@@ -235,6 +247,33 @@ meta-ads upload-image ./images/ad.png
 meta-ads upload-image ./images/ad.png --live --yes
 ```
 
+### `upload-video <video-path>`
+
+Defaults to dry run. Meta processes uploaded video asynchronously; the returned video ID is usable in an ad creative right away, but may briefly return a "not ready" error until processing finishes.
+
+```bash
+meta-ads upload-video ./videos/reel.mp4
+meta-ads upload-video ./videos/reel.mp4 --live --yes
+```
+
+### `add-ad <ad-set-id>`
+
+Attach a single new ad — image or video — to an ad set that already exists, without redeploying the whole campaign. Useful for adding one more creative variant (e.g. a Reels/Stories video ad) to a running ad set. Defaults to dry run.
+
+```bash
+meta-ads add-ad 120251423501650356 \
+  --name "Reel Ad V1" \
+  --video ./videos/reel.mp4 \
+  --thumbnail ./images/reel-cover.png \
+  --primary-text "Your ad copy." \
+  --headline "Your Headline" \
+  --link "https://example.com" \
+  --cta SHOP_NOW \
+  --live --yes
+```
+
+Use `--image` instead of `--video`/`--thumbnail` for an image ad. `--status` defaults to `PAUSED`.
+
 ### `bulk-status <status> <campaign-id...>`
 
 Bulk pause, activate, or delete campaigns. Defaults to dry run.
@@ -275,7 +314,7 @@ meta-ads setup --client chatgpt
 ## Safety Controls
 
 - Campaigns are created as `PAUSED` by default.
-- `budget`, `upload-image`, and `bulk-status` default to dry run. Live operations require `--live`, with an interactive confirmation unless `--yes` is passed.
+- `budget`, `upload-image`, `upload-video`, `add-ad`, and `bulk-status` default to dry run. Live operations require `--live`, with an interactive confirmation unless `--yes` is passed.
 - `META_ADS_MAX_DAILY_BUDGET_CENTS` blocks budget changes above your chosen cap.
 - `activate` and `delete` ask for confirmation unless `--yes` is passed.
 - Mutating commands write JSONL audit events. Default path: `~/.meta-ads-cli/audit.jsonl`. Credentials are never written.
@@ -316,10 +355,10 @@ See the [`examples/`](examples/) directory for ready-to-customize campaign confi
 
 The tool wraps the Meta Marketing API directly. The full `create` chain:
 
-1. Uploads your ad images to your ad account
+1. Uploads your ad images and videos to your ad account
 2. Creates a campaign with your objective
 3. Creates an ad set with your budget and targeting
-4. Creates ad creatives linking your images and copy
+4. Creates ad creatives linking your images/videos and copy
 5. Creates ads linking creatives to the ad set
 
 Everything is created as `PAUSED` by default so you can review before spending.

@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/rizbud/meta-ads-cli/api"
+	"github.com/rizbud/meta-ads-cli/campaign"
+	"github.com/rizbud/meta-ads-cli/config"
 	"github.com/rizbud/meta-ads-cli/money"
 )
 
@@ -354,6 +356,193 @@ func newBulkStatusCommand(r *Runner) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&live, "live", false, "Make the live Meta API changes. Defaults to dry run.")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt.")
+	return cmd
+}
+
+func newUploadVideoCommand(r *Runner) *cobra.Command {
+	var live bool
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "upload-video <video-path>",
+		Short: "Upload a video and return the Meta video ID. Defaults to dry run.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			videoPath := args[0]
+			data, err := os.ReadFile(videoPath)
+			if err != nil {
+				fmt.Fprintf(out, "Video not found: %s\n", videoPath)
+				return errNonZero
+			}
+
+			dryRun := !live
+			confirmed := live
+			base := filepath.Base(videoPath)
+
+			if !dryRun && !yes {
+				if !r.Confirm(fmt.Sprintf("Upload %s to Meta?", base)) {
+					fmt.Fprintln(out, "Aborted.")
+					return nil
+				}
+			}
+			if confirmed {
+				if err := checkAuditLogWritable(); err != nil {
+					fmt.Fprintf(out, "%s\n", err)
+					return errNonZero
+				}
+			}
+			client, err := r.NewClient(dryRun)
+			if err != nil {
+				fmt.Fprintf(out, "%s\n", err)
+				return errNonZero
+			}
+			if dryRun {
+				client.SetDryRunOut(out)
+			}
+			videoID, err := client.UploadVideo(api.UploadVideoParams{FilePath: videoPath, FileName: base, Data: data})
+			if err != nil {
+				fmt.Fprintf(out, "API Error: %s\n", err)
+				return errNonZero
+			}
+			result := map[string]any{"success": true, "video_id": videoID, "dry_run": dryRun, "confirmed": confirmed}
+			if warning := writeAudit("upload-video", map[string]any{"video_path": videoPath, "dry_run": dryRun, "confirmed": confirmed}, result); warning != "" {
+				fmt.Fprintf(out, "Warning: %s\n", warning)
+			}
+			fmt.Fprintf(out, "Video ID: %s\n", videoID)
+			if dryRun {
+				fmt.Fprintln(out, "Dry run only. No live Meta upload was made.")
+			} else {
+				fmt.Fprintln(out, "Meta is now processing the video; it may take a few minutes before it can be used in an ad creative.")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&live, "live", false, "Upload to Meta. Defaults to dry run.")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt.")
+	return cmd
+}
+
+func newAddAdCommand(r *Runner) *cobra.Command {
+	var live bool
+	var yes bool
+	var name, imagePath, videoPath, thumbnailPath, primaryText, headline, description, cta, link, status string
+
+	cmd := &cobra.Command{
+		Use:   "add-ad <ad-set-id>",
+		Short: "Attach one new ad (image or video) to an already-existing ad set. Defaults to dry run.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+			adSetID := args[0]
+
+			ad, err := config.ValidateAd(config.AdConfig{
+				Name:        name,
+				Image:       imagePath,
+				Video:       videoPath,
+				Thumbnail:   thumbnailPath,
+				PrimaryText: primaryText,
+				Headline:    headline,
+				Description: description,
+				CTA:         cta,
+				Link:        link,
+			})
+			if err != nil {
+				fmt.Fprintf(out, "Config error:\n%s\n", err)
+				return errNonZero
+			}
+
+			adStatus := strings.ToUpper(status)
+			if adStatus == "" {
+				adStatus = "PAUSED"
+			}
+			if adStatus != "PAUSED" && adStatus != "ACTIVE" {
+				fmt.Fprintf(out, "--status must be PAUSED or ACTIVE.\n")
+				return errNonZero
+			}
+
+			dryRun := !live
+			confirmed := live
+
+			mediaKind := "image"
+			if ad.IsVideo() {
+				mediaKind = "video"
+			}
+			if !dryRun && !yes {
+				if !r.Confirm(fmt.Sprintf("Add %s ad %q to ad set %s?", mediaKind, ad.Name, adSetID)) {
+					fmt.Fprintln(out, "Aborted.")
+					return nil
+				}
+			}
+			if confirmed {
+				if err := checkAuditLogWritable(); err != nil {
+					fmt.Fprintf(out, "%s\n", err)
+					return errNonZero
+				}
+			}
+
+			client, err := r.NewClient(dryRun)
+			if err != nil {
+				fmt.Fprintf(out, "%s\n", err)
+				return errNonZero
+			}
+			if dryRun {
+				client.SetDryRunOut(out)
+			}
+
+			request := map[string]any{
+				"ad_set_id":  adSetID,
+				"name":       ad.Name,
+				"media_kind": mediaKind,
+				"dry_run":    dryRun,
+				"confirmed":  confirmed,
+			}
+
+			res, err := campaign.AddAdToAdSet(client, ad, adSetID, adStatus)
+			if err != nil {
+				if warning := writeAudit("add-ad", request, map[string]any{
+					"success":     false,
+					"dry_run":     dryRun,
+					"confirmed":   confirmed,
+					"creative_id": res.CreativeID,
+					"error":       err.Error(),
+					"error_code":  apiErrorCode(err),
+				}); warning != "" {
+					fmt.Fprintf(out, "Warning: %s\n", warning)
+				}
+				fmt.Fprintf(out, "API Error: %s\n", err)
+				return errNonZero
+			}
+
+			result := map[string]any{
+				"success":     true,
+				"dry_run":     dryRun,
+				"confirmed":   confirmed,
+				"creative_id": res.CreativeID,
+				"ad_id":       res.AdID,
+			}
+			if warning := writeAudit("add-ad", request, result); warning != "" {
+				fmt.Fprintf(out, "Warning: %s\n", warning)
+			}
+			fmt.Fprintf(out, "Creative: %s\n", res.CreativeID)
+			fmt.Fprintf(out, "Ad:       %s (%s)\n", res.AdID, adStatus)
+			if dryRun {
+				fmt.Fprintln(out, "Dry run only. No live Meta change was made.")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "Ad name (required).")
+	cmd.Flags().StringVar(&imagePath, "image", "", "Path to the ad image. Mutually exclusive with --video.")
+	cmd.Flags().StringVar(&videoPath, "video", "", "Path to the ad video. Mutually exclusive with --image.")
+	cmd.Flags().StringVar(&thumbnailPath, "thumbnail", "", "Path to a cover image for a video ad (required with --video).")
+	cmd.Flags().StringVar(&primaryText, "primary-text", "", "Primary ad text (required).")
+	cmd.Flags().StringVar(&headline, "headline", "", "Ad headline (required).")
+	cmd.Flags().StringVar(&description, "description", "", "Ad description.")
+	cmd.Flags().StringVar(&cta, "cta", "LEARN_MORE", "Call to action, e.g. LEARN_MORE, SHOP_NOW.")
+	cmd.Flags().StringVar(&link, "link", "", "Destination link (required).")
+	cmd.Flags().StringVar(&status, "status", "PAUSED", "Ad status: PAUSED or ACTIVE.")
+	cmd.Flags().BoolVar(&live, "live", false, "Make the live Meta API change. Defaults to dry run.")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip confirmation prompt.")
 	return cmd
 }

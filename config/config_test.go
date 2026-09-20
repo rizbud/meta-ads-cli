@@ -299,6 +299,81 @@ func TestValidateConfigMissingImageFile(t *testing.T) {
 	}
 }
 
+func TestValidateConfigMissingImageOrVideo(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.Ads[0].Image = ""
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "ads[0].image or ads[0].video is required") {
+		t.Errorf("error = %q", err)
+	}
+}
+
+func TestValidateConfigBothImageAndVideo(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.Ads[0].Video = writeTempFound(t)
+	cfg.Ads[0].Thumbnail = writeTempFound(t)
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "cannot set both image and video") {
+		t.Errorf("error = %q", err)
+	}
+}
+
+func TestValidateConfigVideoRequiresThumbnail(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.Ads[0].Image = ""
+	cfg.Ads[0].Video = writeTempFound(t)
+	err := ValidateConfig(cfg)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "ads[0].thumbnail is required for video ads") {
+		t.Errorf("error = %q", err)
+	}
+}
+
+func TestValidateConfigVideoAdValid(t *testing.T) {
+	cfg := validConfig(t)
+	cfg.Ads[0].Image = ""
+	cfg.Ads[0].Video = writeTempFound(t)
+	cfg.Ads[0].Thumbnail = writeTempFound(t)
+	if err := ValidateConfig(cfg); err != nil {
+		t.Fatalf("ValidateConfig: %v", err)
+	}
+	if !cfg.Ads[0].IsVideo() {
+		t.Error("IsVideo() = false, want true")
+	}
+}
+
+func TestLoadConfigResolvesRelativeVideoAndThumbnailPaths(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "campaign.yaml")
+	content := `
+ads:
+  - name: "Ad"
+    video: ./videos/reel.mp4
+    thumbnail: ./images/cover.png
+`
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, "videos", "reel.mp4"); cfg.Ads[0].Video != want {
+		t.Errorf("video = %q, want %q", cfg.Ads[0].Video, want)
+	}
+	if want := filepath.Join(dir, "images", "cover.png"); cfg.Ads[0].Thumbnail != want {
+		t.Errorf("thumbnail = %q, want %q", cfg.Ads[0].Thumbnail, want)
+	}
+}
+
 func TestValidateConfigInvalidCTA(t *testing.T) {
 	cfg := validConfig(t)
 	cfg.Ads[0].CTA = "NOPE"

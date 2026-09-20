@@ -15,6 +15,7 @@ import (
 // Creator is the subset of the Meta API client the campaign orchestrator needs.
 type Creator interface {
 	UploadImage(p api.UploadImageParams) (string, error)
+	UploadVideo(p api.UploadVideoParams) (string, error)
 	CreateCampaign(p api.CreateCampaignParams) (string, error)
 	CreateAdSet(p api.CreateAdSetParams) (string, error)
 	CreateAdCreative(p api.CreateAdCreativeParams) (string, error)
@@ -41,21 +42,14 @@ func CreateFullCampaign(client Creator, cfg *config.Config) (Result, error) {
 	}
 
 	imageHashes := map[string]string{}
+	videoIDs := map[string]string{}
 	for _, ad := range cfg.Ads {
-		data, err := os.ReadFile(ad.Image)
+		imageHash, videoID, err := uploadAdMedia(client, ad)
 		if err != nil {
 			return res, err
 		}
-		hash, err := client.UploadImage(api.UploadImageParams{
-			FilePath:    ad.Image,
-			FileName:    filepath.Base(ad.Image),
-			ContentType: "image/png",
-			Data:        data,
-		})
-		if err != nil {
-			return res, err
-		}
-		imageHashes[ad.Name] = hash
+		imageHashes[ad.Name] = imageHash
+		videoIDs[ad.Name] = videoID
 	}
 
 	campaignID, err := client.CreateCampaign(api.CreateCampaignParams{
@@ -102,37 +96,119 @@ func CreateFullCampaign(client Creator, cfg *config.Config) (Result, error) {
 	res.AdSetID = adSetID
 
 	for _, ad := range cfg.Ads {
-		cta := ad.CTA
-		if cta == "" {
-			cta = "LEARN_MORE"
-		}
-		creativeID, err := client.CreateAdCreative(api.CreateAdCreativeParams{
-			Name:        ad.Name + " - Creative",
-			ImageHash:   imageHashes[ad.Name],
-			PrimaryText: strings.TrimSpace(ad.PrimaryText),
-			Headline:    ad.Headline,
-			Description: ad.Description,
-			Link:        ad.Link,
-			CTA:         cta,
-		})
+		creativeID, adID, err := createAdCreativeAndAd(client, ad, adSetID, imageHashes[ad.Name], videoIDs[ad.Name], status)
 		if err != nil {
 			return res, err
 		}
 		res.Creatives = append(res.Creatives, creativeID)
-
-		adID, err := client.CreateAd(api.CreateAdParams{
-			Name:       ad.Name,
-			AdSetID:    adSetID,
-			CreativeID: creativeID,
-			Status:     status,
-		})
-		if err != nil {
-			return res, err
-		}
 		res.Ads = append(res.Ads, adID)
 	}
 
 	return res, nil
+}
+
+// AddAdResult holds the object IDs created for a single ad.
+type AddAdResult struct {
+	CreativeID string
+	AdID       string
+}
+
+// AddAdToAdSet uploads an ad's media (image or video) and attaches it as a
+// new ad to an already-existing ad set. Status defaults to PAUSED when
+// empty.
+func AddAdToAdSet(client Creator, ad config.AdConfig, adSetID, status string) (AddAdResult, error) {
+	if status == "" {
+		status = "PAUSED"
+	}
+	imageHash, videoID, err := uploadAdMedia(client, ad)
+	if err != nil {
+		return AddAdResult{}, err
+	}
+	creativeID, adID, err := createAdCreativeAndAd(client, ad, adSetID, imageHash, videoID, status)
+	if err != nil {
+		return AddAdResult{}, err
+	}
+	return AddAdResult{CreativeID: creativeID, AdID: adID}, nil
+}
+
+// uploadAdMedia uploads an ad's image or video (with its cover thumbnail)
+// and returns the resulting image hash and/or video ID.
+func uploadAdMedia(client Creator, ad config.AdConfig) (imageHash, videoID string, err error) {
+	if ad.IsVideo() {
+		videoData, err := os.ReadFile(ad.Video)
+		if err != nil {
+			return "", "", err
+		}
+		videoID, err = client.UploadVideo(api.UploadVideoParams{
+			FilePath: ad.Video,
+			FileName: filepath.Base(ad.Video),
+			Data:     videoData,
+		})
+		if err != nil {
+			return "", "", err
+		}
+
+		thumbData, err := os.ReadFile(ad.Thumbnail)
+		if err != nil {
+			return "", "", err
+		}
+		imageHash, err = client.UploadImage(api.UploadImageParams{
+			FilePath:    ad.Thumbnail,
+			FileName:    filepath.Base(ad.Thumbnail),
+			ContentType: "image/png",
+			Data:        thumbData,
+		})
+		if err != nil {
+			return "", "", err
+		}
+		return imageHash, videoID, nil
+	}
+
+	data, err := os.ReadFile(ad.Image)
+	if err != nil {
+		return "", "", err
+	}
+	imageHash, err = client.UploadImage(api.UploadImageParams{
+		FilePath:    ad.Image,
+		FileName:    filepath.Base(ad.Image),
+		ContentType: "image/png",
+		Data:        data,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return imageHash, "", nil
+}
+
+func createAdCreativeAndAd(client Creator, ad config.AdConfig, adSetID, imageHash, videoID, status string) (creativeID, adID string, err error) {
+	cta := ad.CTA
+	if cta == "" {
+		cta = "LEARN_MORE"
+	}
+	creativeID, err = client.CreateAdCreative(api.CreateAdCreativeParams{
+		Name:        ad.Name + " - Creative",
+		ImageHash:   imageHash,
+		VideoID:     videoID,
+		PrimaryText: strings.TrimSpace(ad.PrimaryText),
+		Headline:    ad.Headline,
+		Description: ad.Description,
+		Link:        ad.Link,
+		CTA:         cta,
+	})
+	if err != nil {
+		return "", "", err
+	}
+
+	adID, err = client.CreateAd(api.CreateAdParams{
+		Name:       ad.Name,
+		AdSetID:    adSetID,
+		CreativeID: creativeID,
+		Status:     status,
+	})
+	if err != nil {
+		return creativeID, "", err
+	}
+	return creativeID, adID, nil
 }
 
 func mapInterests(list []config.InterestConfig) []api.Interest {

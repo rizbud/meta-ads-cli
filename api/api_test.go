@@ -355,6 +355,111 @@ func TestUploadImageNoHash(t *testing.T) {
 	}
 }
 
+func TestCreateAdCreativeVideo(t *testing.T) {
+	srv, reqs := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, 200, map[string]string{"id": "cr2"})
+	})
+	c := newClient(t, srv)
+
+	id, err := c.CreateAdCreative(CreateAdCreativeParams{
+		Name:        "Reel Creative",
+		ImageHash:   "cover_hash",
+		VideoID:     "vid1",
+		PrimaryText: "Copy here",
+		Headline:    "Big Headline",
+		Description: "Desc",
+		Link:        "https://example.com",
+		CTA:         "LEARN_MORE",
+	})
+	if err != nil {
+		t.Fatalf("CreateAdCreative: %v", err)
+	}
+	if id != "cr2" {
+		t.Errorf("id = %q, want cr2", id)
+	}
+	req := (*reqs)[0]
+	var spec map[string]any
+	if err := json.Unmarshal([]byte(req.query.Get("object_story_spec")), &spec); err != nil {
+		t.Fatalf("object_story_spec invalid JSON: %v", err)
+	}
+	if _, hasLinkData := spec["link_data"]; hasLinkData {
+		t.Errorf("video creative should not include link_data: %v", spec)
+	}
+	videoData, ok := spec["video_data"].(map[string]any)
+	if !ok {
+		t.Fatalf("spec missing video_data: %v", spec)
+	}
+	if videoData["video_id"] != "vid1" {
+		t.Errorf("video_id = %v", videoData["video_id"])
+	}
+	if videoData["image_hash"] != "cover_hash" {
+		t.Errorf("image_hash = %v", videoData["image_hash"])
+	}
+	if videoData["title"] != "Big Headline" {
+		t.Errorf("title = %v", videoData["title"])
+	}
+	cta := videoData["call_to_action"].(map[string]any)
+	if cta["type"] != "LEARN_MORE" {
+		t.Errorf("cta type = %v", cta["type"])
+	}
+}
+
+func TestUploadVideo(t *testing.T) {
+	srv, reqs := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, 200, map[string]string{"id": "vid123"})
+	})
+	c := newClient(t, srv)
+
+	id, err := c.UploadVideo(UploadVideoParams{
+		FilePath: "/tmp/reel.mp4",
+		FileName: "reel.mp4",
+		Data:     []byte("MP4DATA"),
+	})
+	if err != nil {
+		t.Fatalf("UploadVideo: %v", err)
+	}
+	if id != "vid123" {
+		t.Errorf("id = %q, want vid123", id)
+	}
+	req := (*reqs)[0]
+	if req.method != http.MethodPost || req.path != "/act_123456/advideos" {
+		t.Fatalf("got %s %s", req.method, req.path)
+	}
+	contentType := req.r.Header.Get("Content-Type")
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse content type: %v", err)
+	}
+	mr := multipart.NewReader(bytes.NewReader(req.body), params["boundary"])
+	form, err := mr.ReadForm(1 << 20)
+	if err != nil {
+		t.Fatalf("parse multipart: %v", err)
+	}
+	f := form.File["source"]
+	if len(f) != 1 {
+		t.Fatalf("source part count = %d, want 1", len(f))
+	}
+	if f[0].Filename != "reel.mp4" {
+		t.Errorf("filename = %q", f[0].Filename)
+	}
+	file, _ := f[0].Open()
+	data, _ := io.ReadAll(file)
+	if string(data) != "MP4DATA" {
+		t.Errorf("file bytes = %q", string(data))
+	}
+}
+
+func TestDryRunUploadVideo(t *testing.T) {
+	c := New(Config{AccessToken: "t", AdAccountID: "1", PageID: "p", DryRun: true})
+	id, err := c.UploadVideo(UploadVideoParams{FileName: "x.mp4", Data: []byte("x")})
+	if err != nil {
+		t.Fatalf("UploadVideo: %v", err)
+	}
+	if id != "dry_run_video_id" {
+		t.Errorf("id = %q, want dry_run_video_id", id)
+	}
+}
+
 func TestUpdateStatus(t *testing.T) {
 	srv, reqs := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 200, map[string]string{"success": "true"})

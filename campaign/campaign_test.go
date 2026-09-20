@@ -13,18 +13,21 @@ import (
 
 type fakeAPI struct {
 	uploadImageCalls    []api.UploadImageParams
+	uploadVideoCalls    []api.UploadVideoParams
 	createCampaignCalls []api.CreateCampaignParams
 	createAdSetCalls    []api.CreateAdSetParams
 	createCreativeCalls []api.CreateAdCreativeParams
 	createAdCalls       []api.CreateAdParams
 
-	uploadErr   error
-	campaignErr error
-	adSetErr    error
-	creativeErr error
-	adErr       error
+	uploadErr      error
+	uploadVideoErr error
+	campaignErr    error
+	adSetErr       error
+	creativeErr    error
+	adErr          error
 
 	imageHashes []string
+	videoIDs    []string
 	campaignIDs []string
 	adSetIDs    []string
 	creativeIDs []string
@@ -42,6 +45,19 @@ func (f *fakeAPI) UploadImage(p api.UploadImageParams) (string, error) {
 		f.imageHashes = f.imageHashes[1:]
 	}
 	return h, nil
+}
+
+func (f *fakeAPI) UploadVideo(p api.UploadVideoParams) (string, error) {
+	f.uploadVideoCalls = append(f.uploadVideoCalls, p)
+	if f.uploadVideoErr != nil {
+		return "", f.uploadVideoErr
+	}
+	v := "video_1"
+	if len(f.videoIDs) > 0 {
+		v = f.videoIDs[0]
+		f.videoIDs = f.videoIDs[1:]
+	}
+	return v, nil
 }
 
 func (f *fakeAPI) CreateCampaign(p api.CreateCampaignParams) (string, error) {
@@ -303,6 +319,117 @@ func TestCreateFullCampaignStopsAfterCreativeFailure(t *testing.T) {
 	}
 	if len(f.createAdCalls) != 0 {
 		t.Errorf("no ads should be created after creative failure")
+	}
+}
+
+func TestCreateFullCampaignVideoAd(t *testing.T) {
+	dir := t.TempDir()
+	video := filepath.Join(dir, "reel.mp4")
+	thumb := filepath.Join(dir, "reel-cover.png")
+	if err := os.WriteFile(video, []byte("mp4"), 0o644); err != nil {
+		t.Fatalf("write video: %v", err)
+	}
+	if err := os.WriteFile(thumb, []byte("png"), 0o644); err != nil {
+		t.Fatalf("write thumbnail: %v", err)
+	}
+
+	cfg := sampleConfig(t)
+	cfg.Ads = append(cfg.Ads, config.AdConfig{
+		Name:        "Reel Ad",
+		Video:       video,
+		Thumbnail:   thumb,
+		PrimaryText: "Video copy",
+		Headline:    "Video Headline",
+		Link:        "https://example.com/3",
+	})
+
+	f := &fakeAPI{}
+	res, err := CreateFullCampaign(f, cfg)
+	if err != nil {
+		t.Fatalf("CreateFullCampaign: %v", err)
+	}
+	if len(f.uploadVideoCalls) != 1 {
+		t.Fatalf("upload video calls = %d, want 1", len(f.uploadVideoCalls))
+	}
+	if f.uploadVideoCalls[0].FileName != "reel.mp4" {
+		t.Errorf("video filename = %q", f.uploadVideoCalls[0].FileName)
+	}
+	// Thumbnail counts as a third image upload alongside the two image ads.
+	if len(f.uploadImageCalls) != 3 {
+		t.Fatalf("upload image calls = %d, want 3", len(f.uploadImageCalls))
+	}
+	last := f.createCreativeCalls[len(f.createCreativeCalls)-1]
+	if last.VideoID != "video_1" {
+		t.Errorf("creative video id = %q, want video_1", last.VideoID)
+	}
+	if last.ImageHash == "" {
+		t.Errorf("creative image hash (thumbnail) should be set for video ad")
+	}
+	if len(res.Ads) != 3 {
+		t.Errorf("ads = %v, want 3", res.Ads)
+	}
+}
+
+func TestAddAdToAdSetImage(t *testing.T) {
+	img := filepath.Join(t.TempDir(), "ad.png")
+	if err := os.WriteFile(img, []byte("png"), 0o644); err != nil {
+		t.Fatalf("write image: %v", err)
+	}
+	f := &fakeAPI{creativeIDs: []string{"cr_9"}, adIDs: []string{"ad_9"}}
+	res, err := AddAdToAdSet(f, config.AdConfig{
+		Name:        "Extra Ad",
+		Image:       img,
+		PrimaryText: "Copy",
+		Headline:    "Headline",
+		Link:        "https://example.com",
+	}, "set_123", "PAUSED")
+	if err != nil {
+		t.Fatalf("AddAdToAdSet: %v", err)
+	}
+	if res.CreativeID != "cr_9" || res.AdID != "ad_9" {
+		t.Errorf("result = %+v", res)
+	}
+	if f.createAdCalls[0].AdSetID != "set_123" {
+		t.Errorf("ad set id = %q", f.createAdCalls[0].AdSetID)
+	}
+	if len(f.uploadVideoCalls) != 0 {
+		t.Errorf("no video upload expected for image ad")
+	}
+}
+
+func TestAddAdToAdSetVideo(t *testing.T) {
+	dir := t.TempDir()
+	video := filepath.Join(dir, "reel.mp4")
+	thumb := filepath.Join(dir, "cover.png")
+	if err := os.WriteFile(video, []byte("mp4"), 0o644); err != nil {
+		t.Fatalf("write video: %v", err)
+	}
+	if err := os.WriteFile(thumb, []byte("png"), 0o644); err != nil {
+		t.Fatalf("write thumbnail: %v", err)
+	}
+	f := &fakeAPI{}
+	res, err := AddAdToAdSet(f, config.AdConfig{
+		Name:        "Reel Ad",
+		Video:       video,
+		Thumbnail:   thumb,
+		PrimaryText: "Copy",
+		Headline:    "Headline",
+		Link:        "https://example.com",
+	}, "set_123", "")
+	if err != nil {
+		t.Fatalf("AddAdToAdSet: %v", err)
+	}
+	if res.CreativeID == "" || res.AdID == "" {
+		t.Errorf("result = %+v", res)
+	}
+	if len(f.uploadVideoCalls) != 1 {
+		t.Errorf("upload video calls = %d, want 1", len(f.uploadVideoCalls))
+	}
+	if f.createCreativeCalls[0].VideoID == "" {
+		t.Errorf("creative should reference video id")
+	}
+	if f.createAdCalls[0].Status != "PAUSED" {
+		t.Errorf("status should default to PAUSED, got %q", f.createAdCalls[0].Status)
 	}
 }
 
