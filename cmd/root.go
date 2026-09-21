@@ -22,7 +22,7 @@ import (
 var errNonZero = errors.New("exit 1")
 
 // Version matches the upstream release.
-const Version = "0.3.0"
+const Version = "0.3.1"
 
 // Runner holds the injectable seams the CLI needs. A nil NewClient builds the
 // client from environment variables.
