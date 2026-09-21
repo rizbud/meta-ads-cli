@@ -21,6 +21,17 @@ Read from the environment or `.env` in the current directory. **All three are re
 
 Setup: `cp .env.example .env`, then edit.
 
+## Currency & daily_budget units
+
+**CRITICAL**: How Meta interprets `daily_budget` in YAML and `budget <id> <amount>` depends on whether the currency is zero-decimal:
+
+- **Zero-decimal currencies** (`IDR`, `JPY`, `KRW`, `VND`, `BIF`, `CLP`, `DJF`, `GNF`, `ISK`, `KMF`, `PYG`, `RWF`, `UGX`, `VUV`, `XAF`, `XOF`, `XPF`):
+  - Amount is specified in **WHOLE CURRENCY UNITS** (1 unit = 1 Rupiah / Yen / Won).
+  - **DO NOT multiply by 100!** For IDR 18,000/day, write `daily_budget: 18000` (or `meta-ads budget <id> 18000`).
+  - *Warning*: Writing `1800000` for IDR sets the daily budget to **IDR 1,800,000 (1.8 juta)**!
+- **Standard decimal currencies** (`USD`, `EUR`, `GBP`, `AUD`, `CAD`, `SGD`, etc.):
+  - Amount is specified in **cents / minor units** (`1000 = $10.00/day`).
+
 ## Standard workflow
 
 1. `validate` — no API calls:
@@ -30,7 +41,7 @@ Setup: `cp .env.example .env`, then edit.
 3. `create --yes` — deploys for real (skips the confirmation prompt):
    `meta-ads create --config campaign.yaml --yes`
 
-Everything is created as `PAUSED` by default so you can review before spending. `budget`, `upload-image`, and `bulk-status` also default to dry run — live calls need `--live` (plus `--yes`). `activate` and `delete` always confirm unless `--yes`.
+Everything is created as `PAUSED` by default so you can review before spending. `budget`, `upload-image`, `upload-video`, `add-ad`, and `bulk-status` also default to dry run — live calls need `--live` (plus `--yes`). `activate` and `delete` always confirm unless `--yes`.
 
 ## Config schema (campaign.yaml)
 
@@ -42,7 +53,7 @@ campaign:
   special_ad_categories: []          # optional
 ad_set:
   name: "My Ad Set"                  # required
-  daily_budget: 1000                 # required, in cents (1000 = $10/day)
+  daily_budget: 1000                 # required; in cents for USD (1000 = $10/day), or whole units for zero-decimal currencies (18000 = IDR 18.000/day)
   optimization_goal: LINK_CLICKS     # default LINK_CLICKS
   targeting:
     countries: ["US"]                # required
@@ -54,8 +65,19 @@ ad_set:
     facebook_positions: ["feed"]
     instagram_positions: ["stream","story","reels"]
 ads:
-  - name: "My Ad"                    # required
-    image: ./images/ad.png           # required; relative paths resolve against the YAML file's dir
+  # Image ad example
+  - name: "My Image Ad"              # required
+    image: ./images/ad.png           # required for image ads; relative paths resolve against YAML dir
+    primary_text: "copy"             # required
+    headline: "Headline"             # required
+    link: "https://example.com"      # required
+    description: ""                  # optional
+    cta: LEARN_MORE                  # default LEARN_MORE
+
+  # Video / Reels ad example (mutually exclusive with image)
+  - name: "My Video Ad"              # required
+    video: ./videos/reel.mp4         # required for video ads
+    thumbnail: ./images/cover.png    # required for video ads (still cover image)
     primary_text: "copy"             # required
     headline: "Headline"             # required
     link: "https://example.com"      # required
@@ -63,7 +85,7 @@ ads:
     cta: LEARN_MORE                  # default LEARN_MORE
 ```
 
-Open objectives: `OUTCOME_TRAFFIC`, `OUTCOME_AWARENESS`, `OUTCOME_ENGAGEMENT`, `OUTCOME_LEADS`, `OUTCOME_SALES`, `OUTCOME_APP_PROMOTION`. CTAs: `LEARN_MORE`, `SIGN_UP`, `DOWNLOAD`, `SHOP_NOW`, `BOOK_NOW`, `GET_OFFER`, `SUBSCRIBE`, `CONTACT_US`, `APPLY_NOW`, `WATCH_MORE`. `validate` reports any invalid objective/goal/CTA/status, missing required fields, and missing image files; defaults are applied in place.
+Open objectives: `OUTCOME_TRAFFIC`, `OUTCOME_AWARENESS`, `OUTCOME_ENGAGEMENT`, `OUTCOME_LEADS`, `OUTCOME_SALES`, `OUTCOME_APP_PROMOTION`. CTAs: `LEARN_MORE`, `SIGN_UP`, `DOWNLOAD`, `SHOP_NOW`, `BOOK_NOW`, `GET_OFFER`, `SUBSCRIBE`, `CONTACT_US`, `APPLY_NOW`, `WATCH_MORE`. `validate` reports any invalid objective/goal/CTA/status, missing required fields, and missing media files; defaults are applied in place.
 
 ## Command reference
 
@@ -75,8 +97,10 @@ Open objectives: `OUTCOME_TRAFFIC`, `OUTCOME_AWARENESS`, `OUTCOME_ENGAGEMENT`, `
 | `account [--json-output]` | Ad account summary |
 | `campaigns \| adsets \| ads [--limit N] [--json-output]` | List entities (limit cap: 100) |
 | `insights [object-id] [--level ...] [--date-preset ...] [--json-output]` | Insights; default target is the ad account |
-| `budget <object-id> <cents> [--live] [--yes]` | Update daily budget; respects `META_ADS_MAX_DAILY_BUDGET_CENTS` |
+| `budget <object-id> <amount> [--live] [--yes]` | Update daily budget (cents for USD, whole units for IDR); respects `META_ADS_MAX_DAILY_BUDGET_CENTS` |
 | `upload-image <path> [--live] [--yes]` | Upload an image, print its hash |
+| `upload-video <path> [--live] [--yes]` | Upload a video, print its video ID |
+| `add-ad <ad-set-id> [--image <p> \| --video <p> --thumbnail <p>] --headline "..." --primary-text "..." --link "..." [--live] [--yes]` | Attach a single ad to existing ad set |
 | `bulk-status <PAUSED\|ACTIVE\|DELETED> <id...> [--live] [--yes]` | Bulk status updates |
 | `pause \| activate \| delete <campaign-id> [--yes]` | Single-campaign status operations |
 | `setup --client <claude\|cursor\|codex\|chatgpt>` | Print MCP setup snippets |
